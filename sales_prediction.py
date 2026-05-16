@@ -1,5 +1,6 @@
 # %% 앙상블 모형 기반 신용카드 일별 매출 예측
 # %% 0. Environment Settings
+import platform
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -8,13 +9,15 @@ import matplotlib.pyplot as plt
 
 plt.style.use('ggplot')
 
-plt.rc('font', family='Malgun Gothic')  # Windows
-# plt.rc('font', family='AppleGothic')  # Mac
+if platform.system() == 'Windows':
+    plt.rc('font', family='Malgun Gothic')
+else:
+    plt.rc('font', family='AppleGothic')
 plt.rc('axes', unicode_minus=False)
 
 # %% 1. LOAD THE DATA
-# Data Source: KDX Data - [NH농협카드] 일자별 소비현황_서울
-bas_ym = pd.date_range(start='20200101', end='20240630', freq='MS').strftime('%Y%m').tolist()
+# Data Source: 금융데이터거래소 - [NH농협카드] 일자별 소비현황_서울
+bas_ym = pd.date_range(start='20200101', end='20240131', freq='MS').strftime('%Y%m').tolist()
 
 df = pd.DataFrame()
 
@@ -103,97 +106,120 @@ for i, vars in enumerate(variables):
     sns.boxplot(data=df, x=vars,
                 ax=axes[i%3][1])
     axes[i%3][0].set_title(vars)
+    axes[i%3][0].tick_params(axis='x', rotation=30)
 
-    plt.tight_layout()
-
+plt.tight_layout()
 fig.suptitle('')
 plt.show()
 
-# %% 3-4. Sales by Day
-fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12,4))
+# %% 3-4. Sales by Day & Month
+fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(12,8))
 
-sns.barplot(data=df, x='dayname', y='이용건수_전체', 
-            palette='crest', ax=axes[0])
-sns.barplot(data=df, x='dayname', y='이용금액_전체_억원', 
-            palette='crest', ax=axes[1])
-plt.tight_layout()
-plt.show()
+# Row 1: 요일별
+sns.barplot(data=df, x='dayname', y='이용건수_전체',
+            hue='dayname', palette='crest', legend=False, ax=axes[0][0])
+sns.barplot(data=df, x='dayname', y='이용금액_전체_억원',
+            hue='dayname', palette='crest', legend=False, ax=axes[0][1])
+axes[0][0].set_title('요일별 이용건수')
+axes[0][1].set_title('요일별 이용금액 (억원)')
 
-# 3-5. Sales by Month
-fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12,4))
+# Row 2: 월별
+sns.lineplot(data=df, x='month', y='이용건수_전체', ax=axes[1][0])
+sns.lineplot(data=df, x='month', y='이용금액_전체_억원', ax=axes[1][1])
+axes[1][0].set_title('월별 이용건수')
+axes[1][1].set_title('월별 이용금액 (억원)')
+axes[1][0].set_xticks(range(1,13))
+axes[1][1].set_xticks(range(1,13))
 
-sns.lineplot(data=df, x='month', y='이용건수_전체',
-            palette='crest', ax=axes[0])
-sns.lineplot(data=df, x='month', y='이용금액_전체_억원',
-            palette='crest', ax=axes[1])
-
-axes[0].set_title('이용건수_전체')
-axes[1].set_title('이용금액_전체')
-axes[0].set_xticks(range(1,13))
-axes[1].set_xticks(range(1,13))
-
+fig.suptitle('신용카드 이용 현황 (요일별 / 월별)', fontsize=14, fontweight='bold')
 plt.tight_layout()
 plt.show()
 
 # %% 4. 모델링
-from sklearn.model_selection import train_test_split
-
-# 4-1. Train-Validation Split
-ind_vars = ['승인일자', 'year', 'month', 'day', 'dayofweek']
-dep_vars = ['이용건수_개인', '이용건수_법인', '이용금액_개인_억원', '이용금액_법인_억원']
-
-X = df[df['year'] != 2024][ind_vars]
-y = df[df['year'] != 2024][dep_vars]
-
-X_train, X_valid, y_train, y_valid = train_test_split(X, y,
-                                                      test_size=0.2, 
-                                                      random_state=42
-                                                      )
-print(X_train.shape, y_train.shape)
-print(X_valid.shape, y_valid.shape)
-
-# 4.2. 모델 학습
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
-
-# 4-2. Machine Learning (RandomForest, XGBoost, LightGBM)
-dep_var = '이용금액_개인_억원'
-
-model_rf = RandomForestRegressor(n_estimators=1000,
-                                 max_depth=20,
-                                 random_state=42)
-model_xgb = XGBRegressor(random_state=42)
-model_lgbm = LGBMRegressor(random_state=42)
-
-model_rf.fit(X_train, y_train[dep_var])
-model_xgb.fit(X_train, y_train[dep_var]) 
-model_lgbm.fit(X_train, y_train[dep_var])
-
-# 4-3. Model Comparison
 from sklearn.metrics import mean_squared_error
 
-y_valid_dep_var = y_valid[dep_var]
+# 4-1. Time Window Expanding Cross Validation
+ind_vars = ['승인일자', 'year', 'month', 'day', 'dayofweek']
+dep_var  = '이용금액_개인_억원'
 
-# Prediction
-y_pred_rf = model_rf.predict(X_valid)
-y_pred_xgb = model_xgb.predict(X_valid)
-y_pred_lgbm = model_lgbm.predict(X_valid)
+df_cv_data = df[df['year'] != 2024].copy()
+periods = sorted(df_cv_data['date'].dt.to_period('M').unique())
 
-# MSE
-mse_rf = mean_squared_error(y_pred_rf, y_valid_dep_var)
-mse_xgb = mean_squared_error(y_pred_xgb, y_valid_dep_var)
-mse_lgbm = mean_squared_error(y_pred_lgbm, y_valid_dep_var)
+cv_results = []
 
-print(f'MSE (RandomForest): {mse_rf:.2f}')
-print(f'MSE (XGBoost): {mse_xgb:.2f}')
-print(f'MSE (LightGBM): {mse_lgbm:.2f}')
+for i in range(1, len(periods)):
+    train_mask = df_cv_data['date'].dt.to_period('M').isin(periods[:i])
+    test_mask  = df_cv_data['date'].dt.to_period('M') == periods[i]
+
+    X_tr = df_cv_data[train_mask][ind_vars]
+    y_tr = df_cv_data[train_mask][dep_var]
+    X_te = df_cv_data[test_mask][ind_vars]
+    y_te = df_cv_data[test_mask][dep_var]
+
+    m_rf   = RandomForestRegressor(
+        n_estimators=100,   # CV 속도 확보 (최종 학습은 1000)
+        max_depth=6,        # 피처 5개 기준, 깊어질수록 초기 소규모 fold에서 과적합
+        min_samples_leaf=3, # 리프 최소 3샘플: 초기 fold(~30행) 과적합 방지
+        random_state=42
+    )
+    m_xgb  = XGBRegressor(
+        n_estimators=100,      # CV 속도 확보
+        learning_rate=0.05,    # 낮은 학습률: 과적합 방지 및 안정적 수렴
+        max_depth=3,           # 피처가 적어 얕은 트리가 일반화에 유리
+        subsample=0.8,         # 행 샘플링: 분산 감소
+        colsample_bytree=1.0,  # 피처 5개 전부 사용
+        random_state=42
+    )
+    m_lgbm = LGBMRegressor(
+        n_estimators=100,    # CV 속도 확보
+        learning_rate=0.05,  # 낮은 학습률: 과적합 방지
+        num_leaves=15,       # 2^4-1 수준, max_depth≈4에 해당
+        min_child_samples=5, # 리프 최소 5샘플: 초기 소규모 fold 과적합 방지
+        subsample=0.8,       # 행 샘플링: 분산 감소
+        random_state=42,
+        verbose=-1
+    )
+
+    m_rf.fit(X_tr, y_tr)
+    m_xgb.fit(X_tr, y_tr)
+    m_lgbm.fit(X_tr, y_tr)
+
+    cv_results.append({
+        'test_period': str(periods[i]),
+        'train_months': i,
+        'mse_rf':   mean_squared_error(y_te, m_rf.predict(X_te)),
+        'mse_xgb':  mean_squared_error(y_te, m_xgb.predict(X_te)),
+        'mse_lgbm': mean_squared_error(y_te, m_lgbm.predict(X_te)),
+    })
+
+df_cv = pd.DataFrame(cv_results)
+print(df_cv.to_string(index=False))
+
+# 4-2. Machine Learning (RandomForest, XGBoost, LightGBM) - 전체 훈련데이터로 최종 학습
+X_train = df_cv_data[ind_vars]
+y_train = df_cv_data[dep_var]
+
+model_rf   = RandomForestRegressor(n_estimators=1000, max_depth=20, random_state=42)
+model_xgb  = XGBRegressor(random_state=42)
+model_lgbm = LGBMRegressor(random_state=42, verbose=-1)
+
+model_rf.fit(X_train, y_train)
+model_xgb.fit(X_train, y_train)
+model_lgbm.fit(X_train, y_train)
+
+# 4-3. CV 결과 요약
+print(f'Mean MSE (RandomForest): {df_cv["mse_rf"].mean():.2f}')
+print(f'Mean MSE (XGBoost):      {df_cv["mse_xgb"].mean():.2f}')
+print(f'Mean MSE (LightGBM):     {df_cv["mse_lgbm"].mean():.2f}')
 
 best_model = model_lgbm
 
 # %% 5. 결과
 # 5-1. Model Evaluation
-test_period = df_test['date'].between('2024/06/01', '2024/06/30')
+test_period = df_test['date'].between('2024/01/01', '2024/01/31')
 
 x_range = np.arange(1,len(df_test[test_period])+1)
 X_test = df_test[test_period][ind_vars]
@@ -246,7 +272,7 @@ plt.plot(x_range, y_pred_lgbm,
             marker='o', markersize=5, label=f'LightGBM MSE: {mean_squared_error(y_pred_lgbm, y_test):.2f}', 
             linestyle='--', color='green')
 
-plt.title('Personal Sales Prediction (2024.06)')
+plt.title('Personal Sales Prediction (2024.01)')
 plt.xlabel('Date')
 plt.ylabel('Personal Sales (억 원)')
 plt.xticks(x_range, df_test[test_period]['date'].dt.day)
@@ -254,17 +280,27 @@ plt.legend()
 plt.show()
 
 # 5-3. Model Interpretation
-best_model = model_xgb
+best_model = model_lgbm
+
+feature_name_ko = {
+    '승인일자': '승인일자',
+    'year':     '연도',
+    'month':    '월',
+    'day':      '일',
+    'dayofweek':'요일',
+}
 
 df_fi = pd.DataFrame({
-    'feature': X_train.columns, 
-    'importance': best_model.feature_importances_
+    'feature':   [feature_name_ko[f] for f in X_train.columns],
+    'importance': best_model.feature_importances_,
 })
 
 plt.figure(figsize=(12,6))
 
-sns.barplot(data=df_fi, x='importance', y='feature', palette='crest')
-plt.title('Feature Importance')
+sns.barplot(data=df_fi, x='importance', y='feature', hue='feature', palette='crest', legend=False)
+plt.title('피처 중요도 (LightGBM)')
+plt.xlabel('중요도')
+plt.ylabel('피처')
 plt.show()
 
 
