@@ -2,15 +2,15 @@
 
 > 실제 업무에서 다뤘던 카드 매출 예측 문제를 공개 데이터로 재현한 Replication 프로젝트입니다.
 
-![2024년 1월 일별 매출 예측](images/fig1.png)
+![2024년 6월 일별 매출 예측](images/fig1.png)
 
 ## Summary
 
 - **목표**: 서울 지역 신용카드 일별 개인 매출을 예측하고, 월간 목표 관리에 쓸 수 있는 누적 오차를 함께 평가합니다.
 - **데이터**: 금융데이터거래소의 `NH농협카드 일자별 소비현황_서울` 월별 CSV를 사용합니다.
 - **모델**: RandomForest, XGBoost, LightGBM을 비교합니다.
-- **검증 방식**: Time Window Expanding CV로 모델을 평가하고, 2020~2023 전체 데이터로 최종 학습 후 `2024년 1월`을 타겟 기간으로 평가합니다.
-- **결과**: **RandomForest**가 CV와 최종 테스트 모두에서 일관되게 가장 우수한 성능을 보였습니다.
+- **검증 방식**: Time Window Expanding CV로 모델을 평가하고, 2020~2023 전체 데이터로 최종 학습 후 `2024년 6월`을 타겟 기간으로 평가합니다.
+- **결과**: **RandomForest**가 최종 테스트(2024년 6월, MSE 8,910)에서 가장 우수한 성능을 보였으며, CV 평균 기준으로는 **LightGBM**(MSE 13,299)이 소폭 앞서지만 두 모델 모두 높은 일관성을 유지했습니다.
 - **비즈니스 해석**: MSE와 함께 월 누적 예측 오차를 계산해 "목표 대비 몇 억 원 차이인지" 설명합니다.
 
 ## Repository Structure
@@ -22,7 +22,7 @@
 ├── sales_prediction.py
 ├── sales_prediction.ipynb
 └── images/
-    ├── fig1.png   # 2024년 1월 예측 결과
+    ├── fig1.png   # 2024년 6월 예측 결과
     ├── fig2.png   # EDA (결측치 / 상관관계)
     ├── fig3.png   # 이상치 탐지
     ├── fig4.png   # 요일별 / 월별 매출 패턴
@@ -37,7 +37,7 @@
 데이터는 라이선스와 오너십 문제로 저장소에 포함하지 않습니다. 아래 링크에서 월별 CSV를 내려받은 뒤 `data/` 폴더에 넣어 실행합니다.
 
 - 데이터 출처: [금융데이터거래소 - NH농협카드 일자별 소비현황](https://www.findatamall.or.kr/market/dataProdList?prodCd=GENERAL&menuNo=28)
-- 사용 기간: `2020-01`부터 `2024-01`
+- 사용 기간: `2020-01`부터 `2024-06`
 - 파일명 형식: `[NH농협카드] 일자별 소비현황_서울_YYYYMM.csv`
 - 주요 컬럼: `승인일자`, `이용건수_개인`, `이용금액_개인`, `이용건수_법인`, `이용금액_법인`
 
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 - 피처: `승인일자`, `year`, `month`, `day`, `dayofweek`
 - 검증: Time Window Expanding Cross Validation (2020-01 ~ 2023-12, 47 folds)
 - 최종 학습 구간: `2020-01-01` ~ `2023-12-31`
-- 타겟 평가 구간: `2024-01-01` ~ `2024-01-31`
+- 타겟 평가 구간: `2024-06-01` ~ `2024-06-30`
 
 ## Evaluation
 
@@ -71,7 +71,7 @@ pip install -r requirements.txt
 | 일별 예측 정확도 | MSE, MAE, MAPE | 하루 단위 예측값이 실제값에 얼마나 가까운지 |
 | 월간 목표 관리 | 누적 예측 오차, 누적 오차율 | 한 달 합계 기준으로 몇 억 원을 과대/과소 예측했는지 |
 
-**RandomForest**가 CV와 최종 테스트(2024년 1월) 모두에서 일관되게 낮은 오차를 기록해 최종 모델로 선정되었습니다.
+CV 평균 MSE 기준으로는 **LightGBM**(13,299) > **RandomForest**(13,536) > **XGBoost**(15,312) 순이었으나, 최종 테스트(2024년 6월) 기준으로는 **RandomForest**(8,910) > **LightGBM**(9,022) > **XGBoost**(12,567) 순으로 뒤바뀌었습니다. 월 누적 오차율도 RandomForest +2.22%, XGBoost -2.72%, LightGBM -4.00%로, RandomForest가 가장 안정적인 예측을 보여 최종 모델로 선정되었습니다.
 
 ## Assumptions and Risks
 
