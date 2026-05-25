@@ -142,8 +142,9 @@ from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_squared_error
 
 # 4-1. Time Window Expanding Cross Validation
-ind_vars = ['승인일자', 'year', 'month', 'day', 'dayofweek']
-dep_var  = '이용금액_개인_억원'
+ind_vars   = ['승인일자', 'year', 'month', 'day', 'dayofweek']
+dep_var    = '이용금액_개인_억원'
+WEIGHT_MAP = {2020: 0.1, 2021: 0.2, 2022: 0.3, 2023: 0.4}
 
 df_cv_data = df[df['year'] != 2024].copy()
 periods = sorted(df_cv_data['date'].dt.to_period('M').unique())
@@ -158,34 +159,21 @@ for i in range(1, len(periods)):
     y_tr = df_cv_data[train_mask][dep_var]
     X_te = df_cv_data[test_mask][ind_vars]
     y_te = df_cv_data[test_mask][dep_var]
+    w_tr = df_cv_data[train_mask]['year'].map(WEIGHT_MAP).values
 
     m_rf   = RandomForestRegressor(
-        n_estimators=100,   # CV 속도 확보 (최종 학습은 1000)
-        max_depth=6,        # 피처 5개 기준, 깊어질수록 초기 소규모 fold에서 과적합
-        min_samples_leaf=3, # 리프 최소 3샘플: 초기 fold(~30행) 과적합 방지
-        random_state=42
-    )
+        n_estimators=200, max_depth=5, max_features='sqrt', min_samples_leaf=3, random_state=42)
     m_xgb  = XGBRegressor(
-        n_estimators=100,      # CV 속도 확보
-        learning_rate=0.05,    # 낮은 학습률: 과적합 방지 및 안정적 수렴
-        max_depth=3,           # 피처가 적어 얕은 트리가 일반화에 유리
-        subsample=0.8,         # 행 샘플링: 분산 감소
-        colsample_bytree=1.0,  # 피처 5개 전부 사용
-        random_state=42
-    )
+        n_estimators=200, learning_rate=0.05, max_depth=5, subsample=0.8,
+        colsample_bytree=0.8, min_child_weight=3, reg_alpha=0.05, random_state=42)
     m_lgbm = LGBMRegressor(
-        n_estimators=100,    # CV 속도 확보
-        learning_rate=0.05,  # 낮은 학습률: 과적합 방지
-        num_leaves=15,       # 2^4-1 수준, max_depth≈4에 해당
-        min_child_samples=5, # 리프 최소 5샘플: 초기 소규모 fold 과적합 방지
-        subsample=0.8,       # 행 샘플링: 분산 감소
-        random_state=42,
-        verbose=-1
-    )
+        n_estimators=200, learning_rate=0.05, num_leaves=31, max_depth=5,
+        subsample=0.8, colsample_bytree=1.0, min_child_samples=20, reg_alpha=0,
+        random_state=42, verbose=-1)
 
-    m_rf.fit(X_tr, y_tr)
-    m_xgb.fit(X_tr, y_tr)
-    m_lgbm.fit(X_tr, y_tr)
+    m_rf.fit(X_tr, y_tr, sample_weight=w_tr)
+    m_xgb.fit(X_tr, y_tr, sample_weight=w_tr)
+    m_lgbm.fit(X_tr, y_tr, sample_weight=w_tr)
 
     cv_results.append({
         'test_period': str(periods[i]),
@@ -202,13 +190,21 @@ print(df_cv.to_string(index=False))
 X_train = df_cv_data[ind_vars]
 y_train = df_cv_data[dep_var]
 
-model_rf   = RandomForestRegressor(n_estimators=1000, max_depth=20, random_state=42)
-model_xgb  = XGBRegressor(random_state=42)
-model_lgbm = LGBMRegressor(random_state=42, verbose=-1)
+w_all = df_cv_data['year'].map(WEIGHT_MAP).values
 
-model_rf.fit(X_train, y_train)
-model_xgb.fit(X_train, y_train)
-model_lgbm.fit(X_train, y_train)
+model_rf   = RandomForestRegressor(
+    n_estimators=1000, max_depth=5, max_features='sqrt', min_samples_leaf=3, random_state=42)
+model_xgb  = XGBRegressor(
+    n_estimators=1000, learning_rate=0.05, max_depth=5, subsample=0.8,
+    colsample_bytree=0.8, min_child_weight=3, reg_alpha=0.05, random_state=42)
+model_lgbm = LGBMRegressor(
+    n_estimators=1000, learning_rate=0.05, num_leaves=31, max_depth=5,
+    subsample=0.8, colsample_bytree=1.0, min_child_samples=20, reg_alpha=0,
+    random_state=42, verbose=-1)
+
+model_rf.fit(X_train, y_train, sample_weight=w_all)
+model_xgb.fit(X_train, y_train, sample_weight=w_all)
+model_lgbm.fit(X_train, y_train, sample_weight=w_all)
 
 # 4-3. CV 결과 요약
 print(f'Mean MSE (RandomForest): {df_cv["mse_rf"].mean():.2f}')
