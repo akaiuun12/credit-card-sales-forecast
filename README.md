@@ -2,7 +2,7 @@
 
 > 실제 업무에서 다뤘던 카드 매출 예측 문제를 공개 데이터로 재현한 Replication 프로젝트입니다.
 
-![2024년 6월 일별 매출 예측](images/fig1.png)
+![2024년 1월 일별 매출 예측](images/fig1.png)
 
 ## Summary
 
@@ -22,7 +22,7 @@
 ├── sales_prediction.py
 ├── sales_prediction.ipynb
 └── images/
-    ├── fig1.png   # 2024년 6월 예측 결과
+    ├── fig1.png   # 2024년 1월 예측 결과
     ├── fig2.png   # EDA (결측치 / 상관관계)
     ├── fig3.png   # 이상치 탐지
     ├── fig4.png   # 요일별 / 월별 매출 패턴
@@ -37,7 +37,7 @@
 데이터는 라이선스와 오너십 문제로 저장소에 포함하지 않습니다. 아래 링크에서 월별 CSV를 내려받은 뒤 `data/` 폴더에 넣어 실행합니다.
 
 - 데이터 출처: [금융데이터거래소 - NH농협카드 일자별 소비현황](https://www.findatamall.or.kr/market/dataProdList?prodCd=GENERAL&menuNo=28)
-- 사용 기간: `2020-01`부터 `2024-06`
+- 사용 기간: `2020-01`부터 `2024-01`
 - 파일명 형식: `[NH농협카드] 일자별 소비현황_서울_YYYYMM.csv`
 - 주요 컬럼: `승인일자`, `이용건수_개인`, `이용금액_개인`, `이용건수_법인`, `이용금액_법인`
 
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 - 피처: `승인일자`, `year`, `month`, `day`, `dayofweek`
 - 검증: Time Window Expanding Cross Validation (2020-01 ~ 2023-12, 47 folds)
 - 최종 학습 구간: `2020-01-01` ~ `2023-12-31`
-- 타겟 평가 구간: `2024-06-01` ~ `2024-06-30`
+- 타겟 평가 구간: `2024-01-01` ~ `2024-01-31`
 
 ## Evaluation
 
